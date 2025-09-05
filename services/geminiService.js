@@ -43,6 +43,16 @@ class GeminiService {
       throw new Error(`Gemini API呼び出しエラー: ${error.message}`);
     }
   }
+
+  /**
+   * ChatSession用のメッセージ生成関数
+   * @param {string} message - 送信するメッセージ
+   * @param {Array} conversationHistory - 会話履歴
+   * @returns {Promise<string>} Geminiからの応答テキスト
+   */
+  async generateResponseForSession(message, conversationHistory) {
+    return this.generateResponse(message, conversationHistory);
+  }
 }
 
 module.exports = GeminiService;

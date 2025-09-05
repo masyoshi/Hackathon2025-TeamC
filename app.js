@@ -2,7 +2,7 @@ const { App, ExpressReceiver } = require('@slack/bolt');
 const GeminiService = require('./services/geminiService');
 const ResponseProcessor = require('./services/responseProcessor');
 const ActionHandlers = require('./services/actionHandlers');
-const ContextManager = require('./services/contextManager');
+const ChatSessionManager = require('./services/chatSessionManager');
 require('dotenv').config();
 
 const receiver = new ExpressReceiver({ signingSecret: process.env.SLACK_SIGNING_SECRET });
@@ -11,7 +11,7 @@ const receiver = new ExpressReceiver({ signingSecret: process.env.SLACK_SIGNING_
 const geminiService = new GeminiService();
 const responseProcessor = new ResponseProcessor();
 const actionHandlers = new ActionHandlers();
-const contextManager = new ContextManager();
+const chatSessionManager = new ChatSessionManager();
 
 // Initializes your app with your bot token and signing secret
 const app = new App({
@@ -34,15 +34,14 @@ app.message(async ({ message, say }) => {
       return;
     }
 
-    // ユーザーメッセージを記録
-    contextManager.recordUserMessage(message.channel, message.text);
-
-    // 会話履歴を取得
-    const conversationHistory = contextManager.getConversationHistory(message.channel, 10);
-    console.log(`会話履歴を取得: ${conversationHistory.length}件`);
-
-    // Gemini APIにメッセージと会話履歴を送信
-    const geminiResponse = await geminiService.generateResponse(message.text, conversationHistory);
+    // ChatSessionを取得
+    const session = chatSessionManager.getSession(message.channel);
+    
+    // ChatSessionを使用してメッセージを送信
+    const geminiResponse = await session.sendMessage(
+      message.text, 
+      (msg, history) => geminiService.generateResponseForSession(msg, history)
+    );
 
     // レスポンス内容を解析して処理を分岐
     const context = {
@@ -62,8 +61,7 @@ app.message(async ({ message, say }) => {
       }
     }
 
-    // アシスタントの応答を記録
-    contextManager.recordAssistantMessage(message.channel, processedResponse.message);
+    // ChatSessionは自動的に履歴を管理するため、手動での記録は不要
 
     // 結果をSlackに送信
     let responseMessage = `<@${message.user}> ${processedResponse.message}`;
@@ -89,7 +87,7 @@ app.command('/clear-context', async ({ command, ack, say }) => {
   await ack();
   
   try {
-    contextManager.clearConversationHistory(command.channel_id);
+    chatSessionManager.removeSession(command.channel_id);
     await say(`<@${command.user_id}> このチャンネルの会話履歴をクリアしました。`);
   } catch (error) {
     console.error('会話履歴クリアでエラーが発生しました:', error);
@@ -102,9 +100,12 @@ app.command('/context-stats', async ({ command, ack, say }) => {
   await ack();
   
   try {
-    const stats = contextManager.getConversationStats(command.channel_id);
-    const message = `📊 **会話履歴統計**\n` +
+    const stats = chatSessionManager.getSessionStats(command.channel_id);
+    const message = `📊 **ChatSession統計**\n` +
+      `• セッション存在: ${stats.exists ? '✅' : '❌'}\n` +
       `• 総メッセージ数: ${stats.totalMessages}件\n` +
+      `• ユーザーメッセージ: ${stats.userMessages}件\n` +
+      `• モデルメッセージ: ${stats.modelMessages}件\n` +
       `• 最新メッセージ:\n` +
       stats.recentMessages.map(msg => 
         `  ${msg.role === 'user' ? '👤' : '🤖'} ${msg.content} (${msg.timestamp})`

@@ -1,34 +1,41 @@
-# チャットコンテクスト機能
+# チャットコンテクスト機能（ChatSession実装）
 
 ## 概要
-Geminiで過去のチャットのコンテクストを理解できるようにする機能を実装しました。これにより、Botは会話の流れを理解し、より自然な対話が可能になります。
+[Google AI Developers Forum](https://discuss.ai.google.dev/t/gemini-chat-history/5933)の情報を参考に、Gemini APIの`ChatSession.history`と同様の機能を実装しました。これにより、Botは会話の流れを理解し、より自然で一貫性のある対話が可能になります。
 
 ## 実装した機能
 
-### 1. 会話履歴の保存
-- チャンネルごとにユーザーメッセージとBotの応答を記録
-- メモリベースのストレージ（最大50件/チャンネル）
-- タイムスタンプ付きで履歴を管理
+### 1. ChatSession風の実装
+- チャンネルごとにChatSessionインスタンスを管理
+- 自動的な会話履歴の保存と管理
+- Gemini APIの`ChatSession.history`と同様のAPI設計
 
-### 2. Gemini APIとの統合
+### 2. 効率的な履歴管理
+- メモリベースのストレージ（最大50件/チャンネル）
+- 自動的な古い履歴の削除
+- 最大100セッションの管理（メモリ使用量制限）
+
+### 3. Gemini APIとの統合
 - 過去の会話履歴を含めてGemini APIを呼び出し
 - 会話の文脈を理解した応答を生成
 - デフォルトで最新10件の履歴を使用
 
-### 3. 管理機能
+### 4. 管理機能
 - `/clear-context` コマンド: チャンネルの会話履歴をクリア
-- `/context-stats` コマンド: 会話履歴の統計情報を表示
+- `/context-stats` コマンド: ChatSession統計情報を表示
 
 ## ファイル構成
 
 ### 新規作成ファイル
-- `services/contextStorage.js` - 会話履歴の保存・管理
-- `services/contextManager.js` - コンテクスト管理の高レベルAPI
+- `services/chatSession.js` - ChatSession風の実装
+- `services/chatSessionManager.js` - ChatSession管理マネージャー
+- `services/contextStorage.js` - 会話履歴の保存・管理（レガシー）
+- `services/contextManager.js` - コンテクスト管理の高レベルAPI（レガシー）
 - `docs/context-feature.md` - このドキュメント
 
 ### 更新ファイル
-- `services/geminiService.js` - 会話履歴を含むAPI呼び出しに対応
-- `app.js` - コンテクスト機能の統合とコマンド追加
+- `services/geminiService.js` - ChatSession用のAPI呼び出しに対応
+- `app.js` - ChatSessionManagerを使用した実装に更新
 
 ## 使用方法
 
