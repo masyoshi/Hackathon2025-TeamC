@@ -21,16 +21,11 @@
 - `description`（20文字以上。箇条書きOK。再現手順・期待結果・実結果を推奨）
 - `issue_type`（`bug` | `feature` | `chore` | `task` など。和名→英名に正規化）
 - `priority`（`P0`～`P5`。同義語: `Blocker/Critical= P0/P1` 等を正規化）
-- `project`（GitHub Projects名 or ID。与えられた候補から選択）
 
 任意（出せるだけ集める。無ければ空で可）:
 
-- `assignees`（Slackメンション→GitHubユーザーへ解決。複数可）
 - `labels`（候補から選択。未知ラベルは作成可否ポリシーに従う）
 - `environment`（`dev`|`stage`|`prod` を小文字に正規化）
-- `start_date`, `end_date`（ISO `YYYY-MM-DD` に正規化。日本語相対日付可。「来週火曜」等は**Asia/Tokyo**で解釈）
-- `milestone`（名称→ID解決）
-- `date_of_creation`（未入力時は**現在日時**を使用）
 
 ## 入力の抽出・正規化ルール
 
