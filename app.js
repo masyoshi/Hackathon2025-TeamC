@@ -1,4 +1,5 @@
 const { App, ExpressReceiver } = require('@slack/bolt');
+const { buildGeminiReviewBlocks, registerGeminiReviewActions } = require('./utils/gemini-review');
 const GeminiService = require('./services/geminiService');
 const ResponseProcessor = require('./services/responseProcessor');
 const ActionHandlers = require('./services/actionHandlers');
@@ -19,7 +20,10 @@ const app = new App({
   receiver: receiver
 });
 
-app.message(async ({ message, say }) => {
+// Register Approve/Reject action handlers for Gemini review
+registerGeminiReviewActions(app);
+
+app.message(async ({ message, say, client }) => {
   // メッセージ受信時のログ出力
   console.log(`メッセージ受信: ユーザー=${message.user}, チャンネル=${message.channel}, テキスト="${message.text}"`);
 
@@ -78,7 +82,12 @@ app.message(async ({ message, say }) => {
       }
     }
 
-    await say(responseMessage);
+    // Send the response with Approve/Reject buttons
+    await client.chat.postMessage({
+      channel: message.channel,
+      text: responseMessage,
+      blocks: buildGeminiReviewBlocks(responseMessage),
+    });
 
   } catch (error) {
     console.error('エラーが発生しました:', error);
