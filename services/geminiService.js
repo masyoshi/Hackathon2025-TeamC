@@ -1,10 +1,12 @@
 const { GoogleGenAI } = require('@google/genai');
+const SystemInstructionService = require('./systemInstructionService');
 
 class GeminiService {
   constructor() {
     this.ai = new GoogleGenAI({
       apiKey: process.env.GEMINI_API_KEY
     });
+    this.systemInstructionService = new SystemInstructionService();
   }
 
   /**
@@ -48,22 +50,29 @@ class GeminiService {
    * 公式ドキュメントに基づくマルチターン会話の実装
    * @param {string} message - 送信するメッセージ
    * @param {Array} history - 会話履歴
+   * @param {boolean} useSystemInstruction - システムインストラクションを使用するか（デフォルト: true）
    * @returns {Promise<string>} Geminiからの応答テキスト
    */
-  async generateContentWithHistory(message, history = []) {
+  async generateContentWithHistory(message, history = [], useSystemInstruction = true) {
     try {
       console.log('Gemini API（マルチターン会話）にリクエストを送信中...');
       
-      // 公式ドキュメントの形式に合わせてcontentsを作成
-      const contents = [
-        ...history,
-        {
-          role: "user",
-          parts: [{ text: message }],
-        }
-      ];
+      let contents = [...history];
+      
+      // システムインストラクションを使用する場合
+      if (useSystemInstruction) {
+        const systemInstruction = await this.systemInstructionService.loadSystemInstruction();
+        contents = this.systemInstructionService.integrateWithConversation(contents, systemInstruction);
+        console.log('システムインストラクションを統合しました');
+      }
+      
+      // 現在のメッセージを追加
+      contents.push({
+        role: "user",
+        parts: [{ text: message }],
+      });
 
-      console.log(`会話履歴数: ${history.length}, 現在のメッセージ: ${message}`);
+      console.log(`会話履歴数: ${history.length}, システムインストラクション: ${useSystemInstruction}, 現在のメッセージ: ${message}`);
       
       const response = await this.ai.models.generateContent({
         model: "gemini-2.5-flash",
@@ -84,10 +93,45 @@ class GeminiService {
    * ChatSession用のメッセージ生成関数
    * @param {string} message - 送信するメッセージ
    * @param {Array} conversationHistory - 会話履歴
+   * @param {boolean} useSystemInstruction - システムインストラクションを使用するか（デフォルト: true）
    * @returns {Promise<string>} Geminiからの応答テキスト
    */
-  async generateResponseForSession(message, conversationHistory) {
-    return this.generateContentWithHistory(message, conversationHistory);
+  async generateResponseForSession(message, conversationHistory, useSystemInstruction = true) {
+    return this.generateContentWithHistory(message, conversationHistory, useSystemInstruction);
+  }
+
+  /**
+   * システムインストラクションを取得
+   * @param {boolean} forceReload - 強制再読み込み（デフォルト: false）
+   * @returns {Promise<string>} システムインストラクションの内容
+   */
+  async getSystemInstruction(forceReload = false) {
+    return await this.systemInstructionService.loadSystemInstruction(forceReload);
+  }
+
+  /**
+   * システムインストラクションを更新
+   * @param {string} newInstruction - 新しいシステムインストラクション
+   * @returns {Promise<boolean>} 更新成功フラグ
+   */
+  async updateSystemInstruction(newInstruction) {
+    return await this.systemInstructionService.updateSystemInstruction(newInstruction);
+  }
+
+  /**
+   * システムインストラクションをリセット
+   * @returns {Promise<boolean>} リセット成功フラグ
+   */
+  async resetSystemInstruction() {
+    return await this.systemInstructionService.resetSystemInstruction();
+  }
+
+  /**
+   * システムインストラクションの情報を取得
+   * @returns {Object} システムインストラクションの情報
+   */
+  getSystemInstructionInfo() {
+    return this.systemInstructionService.getSystemInstructionInfo();
   }
 }
 

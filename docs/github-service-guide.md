@@ -318,6 +318,8 @@ console.log('全体テスト結果:', fullTest);
 
 ### Slack Botとの統合例
 
+#### 1. 基本的な統合（手動イシュー作成）
+
 ```javascript
 // app.jsでの使用例
 const GitHubService = require('./services/githubService');
@@ -341,6 +343,93 @@ app.message(async ({ message, say }) => {
     }
   }
 });
+```
+
+#### 2. Gemini承認機能との統合（自動イシュー作成）
+
+```javascript
+// app.jsでの統合例
+const { buildGeminiReviewBlocks, registerGeminiReviewActions, handleApprovalWithGitHub } = require('./utils/gemini-review');
+const GitHubService = require('./services/githubService');
+
+const githubService = new GitHubService();
+
+// Approve/Rejectボタン付きメッセージを送信
+await client.chat.postMessage({
+  channel: message.channel,
+  text: responseMessage,
+  blocks: buildGeminiReviewBlocks(responseMessage),
+});
+
+// Approve時のGitHubイシュー作成
+registerGeminiReviewActions(app, {
+  onApprove: async (args) => {
+    await handleApprovalWithGitHub(args, githubService, originalMessage, geminiResponse);
+  }
+});
+```
+
+#### 3. 承認時のイシュー作成フォーマット
+
+承認されたGeminiの提案は以下の形式でGitHubイシューに変換されます：
+
+**タイトル:**
+```
+[Slack Bot] 元のメッセージの最初の50文字...
+```
+
+**本文:**
+```markdown
+## 概要
+このイシューはSlack Bot経由で承認されたGeminiの提案から自動生成されました。
+
+## 元のメッセージ
+```
+元のユーザーメッセージ
+```
+
+## Geminiの提案
+Geminiの応答内容
+
+## メタデータ
+- **承認者**: <@ユーザーID>
+- **チャンネル**: <#チャンネルID>
+- **承認日時**: 2024-01-01 12:00:00
+- **自動生成**: このイシューはSlack Botによって自動的に作成されました
+
+---
+*このイシューはSlack Botの承認機能によって自動生成されました。*
+```
+
+**ラベル:**
+- `slack-bot`
+- `gemini-approved`
+- `auto-generated`
+
+#### 4. 拒否時のフィードバック機能
+
+Geminiの提案が拒否された場合、以下の処理が実行されます：
+
+1. **フィードバックメッセージの生成**
+   - 拒否された旨をGeminiに伝達
+   - 元のメッセージと提案内容を含む詳細なフィードバック
+
+2. **新しい提案の生成**
+   - フィードバックを考慮した新しい提案をGeminiが生成
+   - 会話履歴を活用した一貫性のある応答
+
+3. **継続的な対話**
+   - 新しい提案にもApprove/Rejectボタンを表示
+   - ユーザーが満足するまで繰り返し可能
+
+**フィードバックメッセージ例:**
+```
+ユーザーがあなたの提案を拒否しました。
+
+**元のメッセージ**: 新しい機能を実装したい
+**あなたの提案**: 以下の機能を実装することをお勧めします...
+
+ユーザーのフィードバックを考慮して、より良い提案をしてください。
 ```
 
 ## 注意事項

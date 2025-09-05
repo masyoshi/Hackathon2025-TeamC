@@ -1,9 +1,10 @@
 const { App, ExpressReceiver } = require('@slack/bolt');
-const { buildGeminiReviewBlocks, registerGeminiReviewActions } = require('./utils/gemini-review');
+const { buildGeminiReviewBlocks, registerGeminiReviewActions, handleApprovalWithGitHub, handleRejectionWithFeedback } = require('./utils/gemini-review');
 const GeminiService = require('./services/geminiService');
 const ResponseProcessor = require('./services/responseProcessor');
 const ActionHandlers = require('./services/actionHandlers');
 const ChatSessionManager = require('./services/chatSessionManager');
+const GitHubService = require('./services/githubService');
 require('dotenv').config();
 
 const receiver = new ExpressReceiver({ signingSecret: process.env.SLACK_SIGNING_SECRET });
@@ -13,6 +14,10 @@ const geminiService = new GeminiService();
 const responseProcessor = new ResponseProcessor();
 const actionHandlers = new ActionHandlers();
 const chatSessionManager = new ChatSessionManager();
+const githubService = new GitHubService();
+
+// Store message context for GitHub integration
+const messageContext = new Map();
 
 // Initializes your app with your bot token and signing secret
 const app = new App({
@@ -20,8 +25,93 @@ const app = new App({
   receiver: receiver
 });
 
-// Register Approve/Reject action handlers for Gemini review
-registerGeminiReviewActions(app);
+// Register Approve/Reject action handlers for Gemini review with GitHub integration
+registerGeminiReviewActions(app, {
+  onApprove: async (args) => {
+    const { body, client } = args;
+    const messageTs = body.container.message_ts;
+    const channelId = body.container.channel_id;
+    
+    // メッセージコンテキストを取得
+    const contextKey = `${channelId}-${messageTs}`;
+    const context = messageContext.get(contextKey);
+    
+    if (context) {
+      console.log('Approval action triggered with context:', context);
+      
+      // GitHubイシューを作成
+      await handleApprovalWithGitHub(args, githubService, context.originalMessage, context.geminiResponse);
+      
+      // コンテキストを削除（メモリ節約）
+      messageContext.delete(contextKey);
+    } else {
+      console.log('Approval action triggered, but context not found for message:', contextKey);
+      
+      // コンテキストが見つからない場合のフォールバック
+      await client.chat.update({
+        channel: channelId,
+        ts: messageTs,
+        text: 'Gemini suggestion approved',
+        blocks: [
+          { 
+            type: 'section', 
+            text: { 
+              type: 'mrkdwn', 
+              text: ':white_check_mark: **Approved**\n\n⚠️ コンテキストが見つからないため、GitHubイシューは作成されませんでした。' 
+            } 
+          }
+        ],
+      });
+    }
+  },
+  onReject: async (args) => {
+    const { body, client } = args;
+    const messageTs = body.container.message_ts;
+    const channelId = body.container.channel_id;
+    
+    // メッセージコンテキストを取得
+    const contextKey = `${channelId}-${messageTs}`;
+    const context = messageContext.get(contextKey);
+    
+    if (context) {
+      console.log('Rejection action triggered with context:', context);
+      
+      // ChatSessionから会話履歴を取得
+      const session = chatSessionManager.getSession(channelId);
+      const conversationHistory = session.getOfficialHistory(10);
+      
+      // Reject処理を実行（フィードバック付き）
+      await handleRejectionWithFeedback(
+        args, 
+        geminiService, 
+        context.originalMessage, 
+        context.geminiResponse, 
+        conversationHistory
+      );
+      
+      // コンテキストを削除（メモリ節約）
+      messageContext.delete(contextKey);
+    } else {
+      console.log('Rejection action triggered, but context not found for message:', contextKey);
+      
+      // コンテキストが見つからない場合のフォールバック
+      await client.chat.update({
+        channel: channelId,
+        ts: messageTs,
+        text: 'Gemini suggestion rejected',
+        blocks: [
+          { 
+            type: 'section', 
+            text: { 
+              type: 'mrkdwn', 
+              text: ':x: **Rejected**\n\n⚠️ コンテキストが見つからないため、フィードバックは送信されませんでした。' 
+            } 
+          }
+        ],
+      });
+    }
+  }
+});
 
 app.message(async ({ message, say, client }) => {
   // メッセージ受信時のログ出力
@@ -83,11 +173,27 @@ app.message(async ({ message, say, client }) => {
     }
 
     // Send the response with Approve/Reject buttons
-    await client.chat.postMessage({
+    const response = await client.chat.postMessage({
       channel: message.channel,
       text: responseMessage,
       blocks: buildGeminiReviewBlocks(responseMessage),
     });
+    
+    // 実際のメッセージタイムスタンプでコンテキストを保存
+    const actualMessageTs = response.ts;
+    const contextKey = `${message.channel}-${actualMessageTs}`;
+    messageContext.set(contextKey, {
+      originalMessage: message.text,
+      geminiResponse: processedResponse.message,
+      userId: message.user,
+      channelId: message.channel,
+      timestamp: actualMessageTs
+    });
+    
+    // コンテキストのクリーンアップ（5分後に削除）
+    setTimeout(() => {
+      messageContext.delete(contextKey);
+    }, 5 * 60 * 1000); // 5分
 
   } catch (error) {
     console.error('エラーが発生しました:', error);
@@ -127,6 +233,71 @@ app.command('/context-stats', async ({ command, ack, say }) => {
     await say(`<@${command.user_id}> ${message}`);
   } catch (error) {
     console.error('会話履歴統計でエラーが発生しました:', error);
+    await say(`<@${command.user_id}> 申し訳ありませんが、エラーが発生しました: ${error.message}`);
+  }
+});
+
+// システムインストラクションを表示するコマンド
+app.command('/system-instruction', async ({ command, ack, say }) => {
+  await ack();
+  
+  try {
+    const instruction = await geminiService.getSystemInstruction();
+    const info = geminiService.getSystemInstructionInfo();
+    
+    const message = `📋 **システムインストラクション**\n` +
+      `• ファイルパス: \`${info.path}\`\n` +
+      `• キャッシュ状態: ${info.cached ? '✅' : '❌'}\n` +
+      `• 最終更新: ${info.lastModified || '不明'}\n\n` +
+      `**内容:**\n\`\`\`\n${instruction.substring(0, 1000)}${instruction.length > 1000 ? '...' : ''}\n\`\`\``;
+    
+    await say(`<@${command.user_id}> ${message}`);
+  } catch (error) {
+    console.error('システムインストラクション取得でエラーが発生しました:', error);
+    await say(`<@${command.user_id}> 申し訳ありませんが、エラーが発生しました: ${error.message}`);
+  }
+});
+
+// システムインストラクションを更新するコマンド
+app.command('/update-system-instruction', async ({ command, ack, say }) => {
+  await ack();
+  
+  try {
+    // コマンドのテキストから新しいインストラクションを取得
+    const newInstruction = command.text;
+    
+    if (!newInstruction || newInstruction.trim() === '') {
+      await say(`<@${command.user_id}> システムインストラクションの内容を指定してください。\n例: \`/update-system-instruction あなたは親切なAIアシスタントです。\``);
+      return;
+    }
+    
+    const success = await geminiService.updateSystemInstruction(newInstruction);
+    
+    if (success) {
+      await say(`<@${command.user_id}> ✅ システムインストラクションを更新しました。`);
+    } else {
+      await say(`<@${command.user_id}> ❌ システムインストラクションの更新に失敗しました。`);
+    }
+  } catch (error) {
+    console.error('システムインストラクション更新でエラーが発生しました:', error);
+    await say(`<@${command.user_id}> 申し訳ありませんが、エラーが発生しました: ${error.message}`);
+  }
+});
+
+// システムインストラクションをリセットするコマンド
+app.command('/reset-system-instruction', async ({ command, ack, say }) => {
+  await ack();
+  
+  try {
+    const success = await geminiService.resetSystemInstruction();
+    
+    if (success) {
+      await say(`<@${command.user_id}> ✅ システムインストラクションをデフォルトにリセットしました。`);
+    } else {
+      await say(`<@${command.user_id}> ❌ システムインストラクションのリセットに失敗しました。`);
+    }
+  } catch (error) {
+    console.error('システムインストラクションリセットでエラーが発生しました:', error);
     await say(`<@${command.user_id}> 申し訳ありませんが、エラーが発生しました: ${error.message}`);
   }
 });
