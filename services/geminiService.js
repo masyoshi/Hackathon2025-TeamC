@@ -10,16 +10,28 @@ class GeminiService {
   /**
    * Gemini APIにメッセージを送信して応答を取得
    * @param {string} message - 送信するメッセージ
+   * @param {Array} conversationHistory - 会話履歴（オプション）
    * @returns {Promise<string>} Geminiからの応答テキスト
    * @throws {Error} API呼び出しでエラーが発生した場合
    */
-  async generateResponse(message) {
+  async generateResponse(message, conversationHistory = []) {
     try {
       console.log('Gemini APIにリクエストを送信中...');
       
+      // 会話履歴と現在のメッセージを組み合わせてcontentsを作成
+      const contents = [...conversationHistory];
+      
+      // 現在のメッセージを追加
+      contents.push({
+        role: 'user',
+        parts: [{ text: message }]
+      });
+
+      console.log(`会話履歴数: ${conversationHistory.length}, 現在のメッセージ: ${message}`);
+      
       const response = await this.ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: message,
+        contents: contents,
       });
 
       const geminiResponse = response.text;
