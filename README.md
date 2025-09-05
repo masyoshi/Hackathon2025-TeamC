@@ -16,12 +16,14 @@ This is a simple Slack Bot application using Node.js and `@slack/bolt`.
     ```
     SLACK_BOT_TOKEN=xoxb-your-token
     SLACK_SIGNING_SECRET=your-signing-secret
+    GEMINI_API_KEY=your-gemini-api-key
     ```
 
-    You can get these values from your Slack App configuration page.
+    You can get these values from the following sources:
 
-    *   `SLACK_BOT_TOKEN`: `OAuth & Permissions` > `Bot User OAuth Token`
-    *   `SLACK_SIGNING_SECRET`: `Basic Information` > `App Credentials` > `Signing Secret`
+    *   `SLACK_BOT_TOKEN`: `OAuth & Permissions` > `Bot User OAuth Token` (Slack App configuration page)
+    *   `SLACK_SIGNING_SECRET`: `Basic Information` > `App Credentials` > `Signing Secret` (Slack App configuration page)
+    *   `GEMINI_API_KEY`: [Google AI Studio](https://aistudio.google.com/app/apikey) でAPIキーを取得
 
 ## Running Locally
 
@@ -55,7 +57,7 @@ This application is ready to be deployed on Render.
     *   **Runtime**: `Node`
     *   **Build Command**: `npm install`
     *   **Start Command**: `npm start`
-3.  Add your environment variables (`SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`) in the `Environment` section.
+3.  Add your environment variables (`SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `GEMINI_API_KEY`) in the `Environment` section.
 4.  Deploy your service.
 5.  Once deployed, copy your service URL (e.g., `https://your-app.onrender.com`).
 6.  On your Slack App configuration page, go to `Event Subscriptions`.

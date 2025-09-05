@@ -5,7 +5,9 @@ require('dotenv').config();
 const receiver = new ExpressReceiver({ signingSecret: process.env.SLACK_SIGNING_SECRET });
 
 // Initialize Gemini AI client
-const ai = new GoogleGenAI({});
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY
+});
 
 // Initializes your app with your bot token and signing secret
 const app = new App({
