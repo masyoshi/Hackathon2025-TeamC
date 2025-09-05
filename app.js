@@ -1,13 +1,15 @@
 const { App, ExpressReceiver } = require('@slack/bolt');
-const { GoogleGenAI } = require('@google/genai');
+const GeminiService = require('./services/geminiService');
+const ResponseProcessor = require('./services/responseProcessor');
+const ActionHandlers = require('./services/actionHandlers');
 require('dotenv').config();
 
 const receiver = new ExpressReceiver({ signingSecret: process.env.SLACK_SIGNING_SECRET });
 
-// Initialize Gemini AI client
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY
-});
+// Initialize services
+const geminiService = new GeminiService();
+const responseProcessor = new ResponseProcessor();
+const actionHandlers = new ActionHandlers();
 
 // Initializes your app with your bot token and signing secret
 const app = new App({
@@ -31,17 +33,38 @@ app.message(async ({ message, say }) => {
     }
 
     // Gemini APIにメッセージを送信
-    console.log('Gemini APIにリクエストを送信中...');
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: message.text,
-    });
+    const geminiResponse = await geminiService.generateResponse(message.text);
 
-    // Geminiの応答をSlackに送信
-    const geminiResponse = response.text;
-    console.log(`Gemini応答: ${geminiResponse}`);
+    // レスポンス内容を解析して処理を分岐
+    const context = {
+      user: message.user,
+      channel: message.channel,
+      timestamp: message.ts
+    };
+    
+    const processedResponse = responseProcessor.processResponse(geminiResponse, context);
+    
+    // アクションを実行
+    let actionResults = [];
+    if (processedResponse.actions && processedResponse.actions.length > 0) {
+      for (const action of processedResponse.actions) {
+        const actionResult = actionHandlers.executeAction(action, processedResponse, context);
+        actionResults.push(actionResult);
+      }
+    }
 
-    await say(`<@${message.user}> ${geminiResponse}`);
+    // 結果をSlackに送信
+    let responseMessage = `<@${message.user}> ${processedResponse.message}`;
+    
+    // アクション実行結果があれば追加
+    if (actionResults.length > 0) {
+      const successfulActions = actionResults.filter(result => result.success);
+      if (successfulActions.length > 0) {
+        responseMessage += `\n\n✅ 実行されたアクション: ${successfulActions.map(r => r.actionType).join(', ')}`;
+      }
+    }
+
+    await say(responseMessage);
 
   } catch (error) {
     console.error('エラーが発生しました:', error);
