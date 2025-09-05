@@ -10,6 +10,9 @@ const app = new App({
 });
 
 app.message(async ({ message, say }) => {
+  // メッセージ受信時のログ出力
+  console.log(`メッセージ受信: ユーザー=${message.user}, チャンネル=${message.channel}, テキスト="${message.text}"`);
+  
   // say() sends a message to the channel where the event was triggered
   await say(`Hello, <@${message.user}>`);
 });
@@ -21,7 +24,11 @@ receiver.router.get('/health', (req, res) => {
 
 (async () => {
   // Start your app
-  await app.start(process.env.PORT || 3000);
+  const port = process.env.PORT || 3000;
+  await app.start(port);
 
   console.log('⚡️ Bolt app is running!');
+  console.log(`ポート: ${port}`);
+  console.log(`環境: ${process.env.NODE_ENV || 'development'}`);
+  console.log('メッセージハンドラーが有効になりました');
 })();
