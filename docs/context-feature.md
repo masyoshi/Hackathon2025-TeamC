@@ -1,14 +1,15 @@
 # チャットコンテクスト機能（ChatSession実装）
 
 ## 概要
-[Google AI Developers Forum](https://discuss.ai.google.dev/t/gemini-chat-history/5933)の情報を参考に、Gemini APIの`ChatSession.history`と同様の機能を実装しました。これにより、Botは会話の流れを理解し、より自然で一貫性のある対話が可能になります。
+[Gemini API の公式ドキュメント](https://ai.google.dev/gemini-api/docs/text-generation?hl=ja#multi-turn-conversations)に基づいて、公式のマルチターン会話機能を実装しました。これにより、Botは会話の流れを理解し、より自然で一貫性のある対話が可能になります。
 
 ## 実装した機能
 
-### 1. ChatSession風の実装
+### 1. 公式マルチターン会話の実装
+- [公式ドキュメント](https://ai.google.dev/gemini-api/docs/text-generation?hl=ja#multi-turn-conversations)に基づく実装
 - チャンネルごとにChatSessionインスタンスを管理
 - 自動的な会話履歴の保存と管理
-- Gemini APIの`ChatSession.history`と同様のAPI設計
+- 公式の`contents`配列形式を使用
 
 ### 2. 効率的な履歴管理
 - メモリベースのストレージ（最大50件/チャンネル）

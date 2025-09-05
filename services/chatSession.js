@@ -50,9 +50,9 @@ class ChatSession {
   }
 
   /**
-   * Gemini API用の履歴形式に変換
+   * 公式ドキュメント形式の履歴を取得
    * @param {number} limit - 取得する履歴数（デフォルト: 10）
-   * @returns {Array} Gemini API用の履歴
+   * @returns {Array} 公式ドキュメント形式の履歴
    */
   getGeminiHistory(limit = 10) {
     const recentHistory = this.history.slice(-limit);
@@ -60,6 +60,15 @@ class ChatSession {
       role: msg.role,
       parts: msg.parts
     }));
+  }
+
+  /**
+   * 公式ドキュメントのマルチターン会話形式で履歴を取得（getGeminiHistoryのエイリアス）
+   * @param {number} limit - 取得する履歴数（デフォルト: 10）
+   * @returns {Array} 公式ドキュメント形式の履歴
+   */
+  getOfficialHistory(limit = 10) {
+    return this.getGeminiHistory(limit);
   }
 
   /**

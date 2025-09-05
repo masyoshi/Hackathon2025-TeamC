@@ -37,11 +37,15 @@ app.message(async ({ message, say }) => {
     // ChatSessionを取得
     const session = chatSessionManager.getSession(message.channel);
     
-    // ChatSessionを使用してメッセージを送信
-    const geminiResponse = await session.sendMessage(
-      message.text, 
-      (msg, history) => geminiService.generateResponseForSession(msg, history)
-    );
+    // 公式ドキュメント形式の履歴を取得
+    const history = session.getOfficialHistory(10);
+    
+    // 公式のマルチターン会話APIを使用
+    const geminiResponse = await geminiService.generateContentWithHistory(message.text, history);
+    
+    // ユーザーメッセージとモデル応答を履歴に追加
+    session.addToHistory('user', message.text);
+    session.addToHistory('model', geminiResponse);
 
     // レスポンス内容を解析して処理を分岐
     const context = {
